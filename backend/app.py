@@ -46,10 +46,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/script.js")
     def serve_root_script() -> Any:
-        root_dir = os.path.abspath(os.path.join(FRONTEND_DIR, ".."))
-        return send_from_directory(root_dir, "script.js")
+        return send_from_directory(os.path.abspath(os.path.join(FRONTEND_DIR, "..")), "script.js")
 
-    @app.get("/api/health")
+    @app.get("/api")
+    @app.get("/api/")
+    @app.get("/health")
     def health() -> Any:
         return jsonify({
             "status": "ok",
@@ -120,6 +121,17 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         emergency["updated_at"] = datetime.now(timezone.utc).isoformat()
         save_emergency(emergency)
         return jsonify(emergency), 200
+
+    # Serve frontend files and support browser requests to frontend paths instead
+    # of returning a confusing API-style 404 when the app is deployed.
+    @app.get("/<path:path>")
+    def frontend_file(path: str) -> Any:
+        if path.startswith("api/"):
+            return jsonify({"error": "Route not found"}), 404
+        requested = os.path.abspath(os.path.join(FRONTEND_DIR, path))
+        if requested.startswith(FRONTEND_DIR + os.sep) and os.path.isfile(requested):
+            return send_from_directory(FRONTEND_DIR, path)
+        return send_from_directory(FRONTEND_DIR, "index.html")
 
     @app.errorhandler(404)
     def not_found(_: Any) -> Any:
